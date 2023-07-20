@@ -4,8 +4,11 @@ import unittest
 import numpy as np
 from numpy.testing import assert_array_equal
 
-
+from compression_knn._compression import algorithms
 from compression_knn.knn import CompressionKNNClassifier
+
+
+compressors = list(algorithms.keys())
 
 
 class TestCompressionKNNClassifier(unittest.TestCase):
@@ -21,11 +24,11 @@ class TestCompressionKNNClassifier(unittest.TestCase):
         X_test = ["yellow, round, sweet", "green, round, sweet"]
         expected_predictions = ["Apple", "Apple"]
 
-        model = CompressionKNNClassifier(n_neighbors=3)
-        model.fit(X_train, y_train)
-        predictions = model.predict(X_test)
-
-        assert_array_equal(predictions, expected_predictions)
+        for algorithm in compressors:
+            model = CompressionKNNClassifier(n_neighbors=3, compressor=algorithm)
+            model.fit(X_train, y_train)
+            predictions = model.predict(X_test)
+            assert_array_equal(predictions, expected_predictions)
 
     def test_predict_single_instance(self):
         X_train = [

@@ -12,16 +12,19 @@ from sklearn.base import BaseEstimator
 from sklearn.base import ClassifierMixin
 from sklearn.utils._param_validation import Integral
 from sklearn.utils._param_validation import Interval
+from sklearn.utils._param_validation import StrOptions
 from sklearn.utils.validation import check_random_state
 
+from compression_knn._compression import algorithms
 from compression_knn.utils import compression_length
 from compression_knn.utils import mode
-
-# noinspection PyProtectedMember
 
 
 with contextlib.suppress(ImportError):  # not in Python < 3.11
     from typing import Self
+
+
+valid_algorithms = set(algorithms.keys())
 
 
 class CompressionKNNClassifier(BaseEstimator, ClassifierMixin):
@@ -31,6 +34,8 @@ class CompressionKNNClassifier(BaseEstimator, ClassifierMixin):
     ----------
     n_neighbors : int, default=5
         Number of neighbors to use by default for nearest neighbors queries.
+    compressor : str, options={"gzip", "bzip2", "lzma"}, default="gzip"
+        The compression algorithm to use.
     random_state : int, optional
         The seed of the pseudo random number generator used when breaking ties.
 
@@ -43,6 +48,7 @@ class CompressionKNNClassifier(BaseEstimator, ClassifierMixin):
     """
     _parameter_constraints = {
         "n_neighbors": [Interval(Integral, 1, None, closed="left")],
+        "compressor": [StrOptions(valid_algorithms)],
         "random_state": ["random_state"],
     }
 
@@ -50,11 +56,12 @@ class CompressionKNNClassifier(BaseEstimator, ClassifierMixin):
         self,
         *,
         n_neighbors: int = 5,
+        compressor: str = "gzip",
         random_state: int | None = None,
-        # TODO: Add compression function parameter.
     ):
         self.n_neighbors = n_neighbors
         self.random_state = random_state
+        self.compressor = compressor
 
     def _check_mode(self, n_classes: int):
         if self.n_neighbors % n_classes == 0:
@@ -68,6 +75,7 @@ class CompressionKNNClassifier(BaseEstimator, ClassifierMixin):
 
     def _check_params(self, n_samples: int) -> None:
         """Check the parameters passed to __init__."""
+        self._validate_params()
         if self.n_neighbors > n_samples:
             raise ValueError(
                 "Expected n_neighbors <= n_samples,"
@@ -95,8 +103,8 @@ class CompressionKNNClassifier(BaseEstimator, ClassifierMixin):
             X, y, accept_sparse=False, ensure_2d=False, dtype="str"
         )
         self.X_ = self.X_.reshape((-1, 1))
-        n_classes = len(np.unique(self.y_))
         self._check_params(len(self.X_))
+        n_classes = len(np.unique(self.y_))
         self._mode = self._check_mode(n_classes)
         self.train_lengths_ = compression_length(self.X_)
         return self  # type: ignore
