@@ -36,8 +36,22 @@ class CompressionKNNClassifier(BaseEstimator, ClassifierMixin):
         Number of neighbors to use by default for nearest neighbors queries.
     compressor : str, options={"gzip", "bzip2", "lzma"}, default="gzip"
         The compression algorithm to use.
-    random_state : int, optional
-        The seed of the pseudo random number generator used when breaking ties.
+    random_state : int, RandomState instance or None, default=None
+        Controls the randomness of the estimator. It's used to break ties when
+        multiple classes have the same number of votes. Pass an int for reproducible
+        output across multiple function calls if `n_neighbors` is divisible by
+        `n_classes`.
+
+    Attributes
+    ----------
+    X_ : np.ndarray[str]
+        The training data.
+    y_ : np.ndarray[str]
+        The training labels.
+    train_lengths_ : np.ndarray[int]
+        The lengths of the compressed training data.
+    n_neighbors_ : int
+        Copy of the parameter with the same name. Used at predict time.
 
     References
     ----------
@@ -57,7 +71,7 @@ class CompressionKNNClassifier(BaseEstimator, ClassifierMixin):
         *,
         n_neighbors: int = 5,
         compressor: str = "gzip",
-        random_state: int | None = None,
+        random_state: int | np.random.RandomState | None = None,
     ):
         self.n_neighbors = n_neighbors
         self.random_state = random_state
@@ -82,6 +96,7 @@ class CompressionKNNClassifier(BaseEstimator, ClassifierMixin):
                 f" got {self.n_neighbors} > {n_samples}."
             )
         self._rng = check_random_state(self.random_state)
+        self.n_neighbors_ = self.n_neighbors
 
     def fit(self, X: npt.ArrayLike[str], y: npt.ArrayLike[str]) -> Self:
         """Fit the k-nearest neighbors classifier under the gzip compression metric.
@@ -135,14 +150,14 @@ class CompressionKNNClassifier(BaseEstimator, ClassifierMixin):
 
         """
         distances = self._distance_matrix(X)
-        indices = np.argpartition(distances, self.n_neighbors - 1, axis=0)[
-            : self.n_neighbors
+        indices = np.argpartition(distances, self.n_neighbors_ - 1, axis=0)[
+            : self.n_neighbors_
         ]
         most_common_indexes = self._mode(indices)
         return self.y_[most_common_indexes]
 
 
-class CompressionKNNClassifierCV(BaseEstimator, ClassifierMixin):
+class CompressionKNNClassifierCV(CompressionKNNClassifier):
     r"""See `CompressionKNNClassifier`.
     Implement fast hyperparameter tuning for n_neighbors,
       by reusing the distance matrix between the training data and the test data.
@@ -151,16 +166,20 @@ class CompressionKNNClassifierCV(BaseEstimator, ClassifierMixin):
     ----------
     n_neighbors : list[int], default=[2, 3, 5, 10]
         Number of neighbors to use by default for nearest neighbors queries.
-    compression_function: str, options={"gzip", "bzip2", "lzma"}
+    compressor: str, options={"gzip", "bzip2", "lzma"}
         The compression function to use.
-    random_state : int, optional
-        The seed of the pseudo random number generator used when breaking ties.
-    cv: int or cross-validation generator, optional
+    random_state : int, RandomState instance or None, default=None
+        Controls the randomness of the estimator. It's used to break ties when
+        multiple classes have the same number of votes. Pass an int for reproducible
+        output across multiple function calls if `n_neighbors` is divisible by
+        `n_classes`.
+    cv: int, cross-validation generator or iterable, optional
         Determines the cross-validation splitting strategy.
         Possible inputs for cv are:
         - None, to use the default 5-fold stratified cross validation,
-        - int, to specify the number of folds in a (Stratified)KFold,
-        - cross-validation generator.
+        - int, to specify the number of folds in a StratifiedKFold,
+        - CV splitter
+        - An iterable yielding (train, test) splits as arrays of indices.
     search_strategy: str, options={"partition", "sort"}
         The search strategy to use when finding the nearest neighbors.
         'partition' uses np.argpartition to find the n_neighbors smallest distances.
@@ -169,5 +188,9 @@ class CompressionKNNClassifierCV(BaseEstimator, ClassifierMixin):
         It should be faster than 'partition' when the list of n_neighbors is large.
 
     """
-    # TODO: Implement this
+    _parameter_constraints: dict = {
+        **CompressionKNNClassifier._parameter_constraints,
+        "cv": ["cv_options"],
+        "search_strategy": [StrOptions({"partition", "sort"})],
+    }
     ...
