@@ -49,6 +49,8 @@ print(y_pred)
 * Implementation of a vector-to-text scikit-learn compatible transformer for non-text 
   tasks
 
+These will be gradually implemented in the `dev` branch. Once all functionality is done, version 1.0.0 will release!
+
 ## References
 
 [“Low-Resource” Text Classification: A Parameter-Free Classification Method with 
