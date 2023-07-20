@@ -14,7 +14,7 @@ from sklearn.utils._param_validation import Integral
 from sklearn.utils._param_validation import Interval
 from sklearn.utils.validation import check_random_state
 
-from compression_knn.utils import gzip_compression_length
+from compression_knn.utils import compression_length
 from compression_knn.utils import mode
 
 # noinspection PyProtectedMember
@@ -98,15 +98,15 @@ class CompressionKNNClassifier(BaseEstimator, ClassifierMixin):
         n_classes = len(np.unique(self.y_))
         self._check_params(len(self.X_))
         self._mode = self._check_mode(n_classes)
-        self.train_lengths_ = gzip_compression_length(self.X_)
+        self.train_lengths_ = compression_length(self.X_)
         return self  # type: ignore
 
     def _distance_matrix(self, X: npt.ArrayLike[str]) -> np.ndarray:
         """Return the distance matrix between X and the training data."""
         to_arr = np.array(X)
         combination_matrix = np.char.add(to_arr, self.X_)
-        combined_lengths = gzip_compression_length(combination_matrix)
-        test_lengths = gzip_compression_length(to_arr)
+        combined_lengths = compression_length(combination_matrix)
+        test_lengths = compression_length(to_arr)
         max_lengths = np.maximum(self.train_lengths_, test_lengths)
         min_lengths = np.minimum(self.train_lengths_, test_lengths)
         distances = (combined_lengths - min_lengths) / max_lengths

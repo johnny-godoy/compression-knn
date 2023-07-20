@@ -1,24 +1,24 @@
 """Implement utility functions."""
-import gzip
 import random
 from typing import Optional
 
 import numpy as np
 
-
-gzip_compress = np.vectorize(
-    gzip.compress,
-    otypes=[bytes],
-)  # TODO: Profile and see if compiling this with Numba/Cython is worth it.
+from compression_knn._compression import algorithms
 
 
-def gzip_compression_length(texts: np.ndarray[str]) -> np.ndarray[int]:
+def compression_length(
+    texts: np.ndarray[str],
+    algorithm: str = "gzip",
+) -> np.ndarray[int]:
     """Return the length of the compressed texts.
 
     Parameters
     ----------
     texts : np.ndarray[str]
         The texts to compress.
+    algorithm : str, options={"gzip", "bzip2", "lzma"}, default="gzip"
+        The compression algorithm to use.
 
     Returns
     -------
@@ -27,12 +27,9 @@ def gzip_compression_length(texts: np.ndarray[str]) -> np.ndarray[int]:
 
     """
     encoded = np.char.encode(texts, encoding="utf-8")
-    compressed = gzip_compress(encoded)
+    compressed = algorithms[algorithm](encoded)
     lengths = np.char.str_len(compressed)
     return lengths
-
-
-# TODO: Implement more compression functions.
 
 
 def mode(

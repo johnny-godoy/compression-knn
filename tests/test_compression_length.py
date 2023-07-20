@@ -4,7 +4,7 @@ import unittest
 
 import numpy as np
 
-from compression_knn.utils import gzip_compression_length
+from compression_knn.utils import compression_length
 from tests.test_assert_less_equal import assert_array_less_equal
 
 
@@ -16,7 +16,7 @@ class TestGzipCompressionLength(unittest.TestCase):
     def test_empty_texts(self):
         texts = np.array([], dtype=str)
         expected_lengths = np.array([], dtype=int)
-        compressed_lengths = gzip_compression_length(texts)
+        compressed_lengths = compression_length(texts)
         self.assert_array_less_equal(compressed_lengths, expected_lengths)
 
     def test_single_text(self):
@@ -24,7 +24,7 @@ class TestGzipCompressionLength(unittest.TestCase):
         expected_lengths = np.array(
             [len(gzip.compress(texts[0].encode("utf-8")))], dtype=int
         )
-        compressed_lengths = gzip_compression_length(texts)
+        compressed_lengths = compression_length(texts)
         self.assert_array_less_equal(compressed_lengths, expected_lengths)
 
     def test_multiple_texts(self):
@@ -32,7 +32,7 @@ class TestGzipCompressionLength(unittest.TestCase):
         expected_lengths = np.array(
             [len(gzip.compress(t.encode("utf-8"))) for t in texts], dtype=int
         )
-        compressed_lengths = gzip_compression_length(texts)
+        compressed_lengths = compression_length(texts)
         self.assert_array_less_equal(compressed_lengths, expected_lengths)
 
 
