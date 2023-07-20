@@ -4,22 +4,27 @@ from __future__ import annotations
 import contextlib
 import functools
 import warnings
-from typing import Optional
 
 import numpy as np
 import numpy.typing as npt
 import scipy.stats
-from sklearn.base import BaseEstimator, ClassifierMixin
-
-# noinspection PyProtectedMember
-from sklearn.utils._param_validation import Interval, Integral
+from sklearn.base import BaseEstimator
+from sklearn.base import ClassifierMixin
+from sklearn.utils._param_validation import Integral
+from sklearn.utils._param_validation import Interval
+from sklearn.utils._param_validation import StrOptions
 from sklearn.utils.validation import check_random_state
 
-from compression_knn.utils import gzip_compression_length, mode
+from compression_knn._compression import algorithms
+from compression_knn.utils import compression_length
+from compression_knn.utils import mode
 
 
 with contextlib.suppress(ImportError):  # not in Python < 3.11
     from typing import Self
+
+
+valid_algorithms = set(algorithms.keys())
 
 
 class CompressionKNNClassifier(BaseEstimator, ClassifierMixin):
@@ -29,6 +34,8 @@ class CompressionKNNClassifier(BaseEstimator, ClassifierMixin):
     ----------
     n_neighbors : int, default=5
         Number of neighbors to use by default for nearest neighbors queries.
+    compressor : str, options={"gzip", "bzip2", "lzma"}, default="gzip"
+        The compression algorithm to use.
     random_state : int, optional
         The seed of the pseudo random number generator used when breaking ties.
 
@@ -41,6 +48,7 @@ class CompressionKNNClassifier(BaseEstimator, ClassifierMixin):
     """
     _parameter_constraints = {
         "n_neighbors": [Interval(Integral, 1, None, closed="left")],
+        "compressor": [StrOptions(valid_algorithms)],
         "random_state": ["random_state"],
     }
 
@@ -48,19 +56,14 @@ class CompressionKNNClassifier(BaseEstimator, ClassifierMixin):
         self,
         *,
         n_neighbors: int = 5,
-        random_state: Optional[int] = None,
-        # TODO: Add compression function parameter.
+        compressor: str = "gzip",
+        random_state: int | None = None,
     ):
         self.n_neighbors = n_neighbors
         self.random_state = random_state
+        self.compressor = compressor
 
-    def _check_mode(self, n_samples: int, n_classes: int):
-        if self.n_neighbors > n_samples:
-            raise ValueError(
-                "Expected n_neighbors <= n_samples,"
-                f" got {self.n_neighbors} > {n_samples}."
-            )
-        # warn if n_neighbors is divisible by n_classes?
+    def _check_mode(self, n_classes: int):
         if self.n_neighbors % n_classes == 0:
             warnings.warn(
                 f"n_neighbors ({self.n_neighbors}) is divisible"
@@ -69,6 +72,16 @@ class CompressionKNNClassifier(BaseEstimator, ClassifierMixin):
             )
             return functools.partial(mode, rng=self._rng)
         return lambda x: scipy.stats.mode(x, axis=0)[0]
+
+    def _check_params(self, n_samples: int) -> None:
+        """Check the parameters passed to __init__."""
+        self._validate_params()
+        if self.n_neighbors > n_samples:
+            raise ValueError(
+                "Expected n_neighbors <= n_samples,"
+                f" got {self.n_neighbors} > {n_samples}."
+            )
+        self._rng = check_random_state(self.random_state)
 
     def fit(self, X: npt.ArrayLike[str], y: npt.ArrayLike[str]) -> Self:
         """Fit the k-nearest neighbors classifier under the gzip compression metric.
@@ -86,22 +99,22 @@ class CompressionKNNClassifier(BaseEstimator, ClassifierMixin):
             The fitted estimator.
 
         """
-        self._rng = check_random_state(self.random_state)
-        # TODO: Write sklearn style validation for X and y.
-        self.X_ = np.array(X).reshape((-1, 1))
-        self.y_ = np.array(y)
+        self.X_, self.y_ = self._validate_data(
+            X, y, accept_sparse=False, ensure_2d=False, dtype="str"
+        )
+        self.X_ = self.X_.reshape((-1, 1))
+        self._check_params(len(self.X_))
         n_classes = len(np.unique(self.y_))
-        n_samples = len(self.X_)
-        self._mode = self._check_mode(n_samples, n_classes)
-        self.train_lengths_ = gzip_compression_length(self.X_)
+        self._mode = self._check_mode(n_classes)
+        self.train_lengths_ = compression_length(self.X_)
         return self  # type: ignore
 
     def _distance_matrix(self, X: npt.ArrayLike[str]) -> np.ndarray:
         """Return the distance matrix between X and the training data."""
         to_arr = np.array(X)
         combination_matrix = np.char.add(to_arr, self.X_)
-        combined_lengths = gzip_compression_length(combination_matrix)
-        test_lengths = gzip_compression_length(to_arr)
+        combined_lengths = compression_length(combination_matrix)
+        test_lengths = compression_length(to_arr)
         max_lengths = np.maximum(self.train_lengths_, test_lengths)
         min_lengths = np.minimum(self.train_lengths_, test_lengths)
         distances = (combined_lengths - min_lengths) / max_lengths

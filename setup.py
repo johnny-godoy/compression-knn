@@ -1,7 +1,12 @@
 """Installation file for the package."""
-from setuptools import setup, find_packages
+from setuptools import find_packages
+from setuptools import setup
 
-from compression_knn import __version__, __author__, __email__, __license__, __maintainer__
+from compression_knn import __author__
+from compression_knn import __email__
+from compression_knn import __license__
+from compression_knn import __maintainer__
+from compression_knn import __version__
 
 
 with open("README.md", "r") as fh:
@@ -21,9 +26,16 @@ setup(
     description="A KNN text classifier that uses text compression.",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    packages=find_packages(),
-    install_requires=install_requires, classifiers=["Programming Language :: Python :: 3.10", "License :: OSI Approved :: MIT License",
-        "Operating System :: OS Independent", "Development Status :: 3 - Alpha", ],
-    python_requires=">=3.10", license=__license__, keywords="knn compression",
+    packages=find_packages(exclude=["tests", "tests.*"]),
+    install_requires=install_requires,
+    classifiers=[
+        "Programming Language :: Python :: 3.10",
+        "License :: OSI Approved :: MIT License",
+        "Operating System :: OS Independent",
+        "Development Status :: 3 - Alpha",
+    ],
+    python_requires=">=3.10",
+    license=__license__,
+    keywords="knn compression",
     url="https://github.com/johnny-godoy/compression-knn",
 )
