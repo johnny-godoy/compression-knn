@@ -20,7 +20,7 @@ pip install git+https://github.com/johnny-godoy/compression-knn.git
 We implement the scikit-learn interface, so it can be used like other scikit-learn classifiers.
 
 ```python
-from compression_knn import CompressionKNNClassifier
+from compression_knn.knn import CompressionKNNClassifier
 
 X_train = [
     "red, round, sweet",
