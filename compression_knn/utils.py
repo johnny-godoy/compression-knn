@@ -5,7 +5,6 @@ from typing import Optional
 
 import numpy as np
 
-# noinspection PyProtectedMember
 
 gzip_compress = np.vectorize(
     gzip.compress,
@@ -67,7 +66,7 @@ def mode(
         max_count = np.max(counts)
         modes = unique_elements[counts == max_count]
         all_modes.append(modes)
-    if all(len(mode) == 1 for mode in all_modes):
+    if all(len(md) == 1 for md in all_modes):
         return np.array(all_modes).flatten()
     if rng is None:
         raise ValueError("Multiple modes found but no RNG given.")
