@@ -44,7 +44,6 @@ print(y_pred)
 
 ## Upcoming
 * Implementation of `CompressionKNNClassifierCV` for fast hyperparameter tuning
-* Support for other compressors
 * Classification performance comparison notebooks
 * Implementation of a vector-to-text scikit-learn compatible transformer for non-text 
   tasks
