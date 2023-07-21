@@ -10,12 +10,14 @@ import numpy.typing as npt
 import scipy.stats
 from sklearn.base import BaseEstimator
 from sklearn.base import ClassifierMixin
+from sklearn.preprocessing import LabelEncoder
 from sklearn.utils._param_validation import Integral
 from sklearn.utils._param_validation import Interval
 from sklearn.utils._param_validation import StrOptions
+from sklearn.utils.validation import check_array
 from sklearn.utils.validation import check_random_state
 
-from compression_knn._compression import algorithms
+from compression_knn._compression_algos import algorithms
 from compression_knn.utils import compression_length
 from compression_knn.utils import mode
 
@@ -104,14 +106,15 @@ class CompressionKNNClassifier(BaseEstimator, ClassifierMixin):
         )
         self.X_ = self.X_.reshape((-1, 1))
         self._check_params(len(self.X_))
-        n_classes = len(np.unique(self.y_))
-        self._mode = self._check_mode(n_classes)
+        self._encoder = LabelEncoder().fit(self.y_)
+        self.y_ = self._encoder.transform(self.y_)
+        self._mode = self._check_mode(len(self._encoder.classes_))
         self.train_lengths_ = compression_length(self.X_)
         return self  # type: ignore
 
     def _distance_matrix(self, X: npt.ArrayLike[str]) -> np.ndarray:
         """Return the distance matrix between X and the training data."""
-        to_arr = np.array(X)
+        to_arr = check_array(X, dtype="str", ensure_2d=False)
         combination_matrix = np.char.add(to_arr, self.X_)
         combined_lengths = compression_length(combination_matrix)
         test_lengths = compression_length(to_arr)
@@ -138,8 +141,8 @@ class CompressionKNNClassifier(BaseEstimator, ClassifierMixin):
         indices = np.argpartition(distances, self.n_neighbors - 1, axis=0)[
             : self.n_neighbors
         ]
-        most_common_indexes = self._mode(indices)
-        return self.y_[most_common_indexes]
+        most_common_indexes = self._mode(self.y_[indices])
+        return self._encoder.inverse_transform(self.y_[most_common_indexes])
 
 
 class CompressionKNNClassifierCV(BaseEstimator, ClassifierMixin):
