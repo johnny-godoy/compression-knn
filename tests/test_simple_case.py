@@ -4,7 +4,7 @@ import unittest
 import numpy as np
 from numpy.testing import assert_array_equal
 
-from compression_knn._compression import algorithms
+from compression_knn._compression_algos import algorithms
 from compression_knn.knn import CompressionKNNClassifier
 
 
