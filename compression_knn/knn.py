@@ -1,6 +1,7 @@
 """Classify a text using KNN on a compression metric."""
 from __future__ import annotations
 
+import abc
 import contextlib
 import functools
 import warnings
@@ -34,7 +35,7 @@ with contextlib.suppress(ImportError):  # not in Python < 3.11
 valid_algorithms = set(algorithms.keys())
 
 
-class BaseCompressionKNN(BaseEstimator, ClassifierMixin):
+class BaseCompressionKNN(BaseEstimator, ClassifierMixin, abc.ABC):
     _parameter_constraints = {
         "compressor": [StrOptions(valid_algorithms)],
         "random_state": ["random_state"],
@@ -51,22 +52,13 @@ class BaseCompressionKNN(BaseEstimator, ClassifierMixin):
         self.compressor = compressor
         self.random_state = random_state
 
-    def _check_neighbors(self, n_neighbors, n_samples: int):
-        if n_neighbors > n_samples:
-            raise ValueError(
-                f"n_neighbors ({n_neighbors}) must be less than or equal to"
-                f" the number of samples ({n_samples})."
-            )
-        return n_neighbors
+    @abc.abstractmethod
+    def _check_neighbors(self, n_neighbors, n_samples: int) -> int:
+        ...
 
-    def _check_mode(self, n_neighbors, n_classes: int) -> callable:
-        if n_neighbors % n_classes == 0:
-            warnings.warn(
-                f"n_neighbors ({n_neighbors}) is divisible by the number of classes"
-                f" ({n_classes}). This means that ties will be broken randomly."
-            )
-            return functools.partial(mode, rng=self._rng)
-        return lambda x: scipy.stats.mode(x, axis=0)[0]
+    @abc.abstractmethod
+    def _check_mode(self, n_neighbors: int, n_classes: int) -> callable:
+        ...
 
     def _check_params(self):
         self._validate_params()
@@ -158,6 +150,23 @@ class CompressionKNNClassifier(BaseCompressionKNN):
         "n_neighbors": [Interval(Integral, 1, None, closed="left")],
     }
 
+    def _check_neighbors(self, n_neighbors, n_samples: int):
+        if n_neighbors > n_samples:
+            raise ValueError(
+                f"n_neighbors ({n_neighbors}) must be less than or equal to"
+                f" the number of samples ({n_samples})."
+            )
+        return n_neighbors
+
+    def _check_mode(self, n_neighbors, n_classes: int) -> callable:
+        if n_neighbors % n_classes == 0:
+            warnings.warn(
+                f"n_neighbors ({n_neighbors}) is divisible by the number of classes"
+                f" ({n_classes}). This means that ties will be broken randomly."
+            )
+            return functools.partial(mode, rng=self._rng)
+        return lambda x: scipy.stats.mode(x, axis=0)[0]
+
 
 class CompressionKNNClassifierCV(BaseCompressionKNN):
     r"""See `CompressionKNNClassifier`.
@@ -240,11 +249,14 @@ class CompressionKNNClassifierCV(BaseCompressionKNN):
         return arr
 
     def _check_mode(self, n_neighbors, n_classes: int) -> callable:
-        for neighbours in n_neighbors:
-            # Throw warnings for n_neighbors % n_classes == 0
-            super()._check_mode(neighbours, n_classes)
-        # TODO: Use the scipy mode function when it's unbiased
-        return functools.partial(mode, rng=self._rng)
+        remainders = np.remainder(n_neighbors, n_classes)
+        if np.any(remainders == 0):
+            warnings.warn(
+                f"A value of n_neighbors is divisible by n_classes ({n_classes})."
+                " This is not recommended as it can lead to ties."
+            )
+            return functools.partial(mode, rng=self._rng)
+        return lambda x: scipy.stats.mode(x, axis=0)[0]
 
     def _check_params(self):
         super()._check_params()
