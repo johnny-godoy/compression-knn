@@ -53,7 +53,7 @@ class BaseCompressionKNN(BaseEstimator, ClassifierMixin, abc.ABC):
         self.random_state = random_state
 
     @abc.abstractmethod
-    def _check_neighbors(self, n_neighbors, n_samples: int) -> int:
+    def _check_neighbors(self, n_neighbors, n_samples: int):
         ...
 
     @abc.abstractmethod
@@ -105,8 +105,8 @@ class BaseCompressionKNN(BaseEstimator, ClassifierMixin, abc.ABC):
 
         """
         distances = self._distance_matrix(X)
-        indices = np.argpartition(distances, self.n_neighbors - 1, axis=0)[
-            : self.n_neighbors
+        indices = np.argpartition(distances, self._n_neighbors - 1, axis=0)[
+            : self._n_neighbors
         ]
         most_common_indexes = self._mode(self.y_[indices])
         return self._encoder.inverse_transform(self.y_[most_common_indexes])
@@ -204,6 +204,7 @@ class CompressionKNNClassifierCV(BaseCompressionKNN):
     """
     _parameter_constraints: dict = {
         **BaseCompressionKNN._parameter_constraints,
+        "n_neighbors": ["array-like"],
         "cv": ["cv_options"],
         "search_strategy": [
             StrOptions(
@@ -246,6 +247,11 @@ class CompressionKNNClassifierCV(BaseCompressionKNN):
                 f"The largest n_neighbors {max_neighbors} is larger"
                 f" than the smallest training fold size {n_samples}."
             )
+        min_neighbors = np.min(arr)  # type: ignore
+        if min_neighbors < 1:
+            raise ValueError(
+                f"The smallest n_neighbors {min_neighbors} is less than 1."
+            )
         return arr
 
     def _check_mode(self, n_neighbors, n_classes: int) -> callable:
@@ -272,7 +278,24 @@ class CompressionKNNClassifierCV(BaseCompressionKNN):
         # Finish checking the neighbors
         n_samples = np.min([len(fold) for _, fold in self._cv.split(X, y)])
         self._n_neighbors = self._check_neighbors(self.n_neighbors, n_samples)
-        # TODO: Implement the search strategies
-        raise NotImplementedError(
-            "Training with cross-validation is not implemented yet."
-        )
+        if self.search_strategy == "sort":
+            nearest = np.argsort(self._distance_matrix(self.X_), axis=1)
+            scores = [[] for _ in self._n_neighbors]
+            for train, test in self._cv.split(X, y):
+                y_train, y_test = y[train], y[test]
+                for i, n_neighbors in enumerate(self._n_neighbors):
+                    neighbors = nearest[test, :n_neighbors]
+                    y_pred = self._mode(y_train[neighbors])
+                    score = self._scorer(y_test, y_pred)
+                    scores[i].append(score)
+            scores = np.array(scores)
+            mean_scores = np.mean(scores, axis=1)
+            best_index = np.argmax(mean_scores)
+            self._n_neighbors = self._n_neighbors[best_index]
+            self.n_neighbors_ = self._n_neighbors  # For users to access
+            self.best_score_ = mean_scores[best_index]
+        elif self.search_strategy == "partition":
+            raise NotImplementedError(
+                "The 'partition' search strategy is not implemented yet."
+            )
+        return self
