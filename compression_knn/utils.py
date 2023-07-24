@@ -4,7 +4,7 @@ from typing import Optional
 
 import numpy as np
 
-from compression_knn._compression import algorithms
+from compression_knn._compression_algos import algorithms
 
 
 def compression_length(

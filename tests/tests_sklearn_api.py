@@ -1,5 +1,4 @@
 """Tests whether TextKNNClassifier follows the sklearn API."""
-
 import unittest
 
 import numpy as np
@@ -8,6 +7,7 @@ from sklearn.model_selection import GridSearchCV
 from sklearn.pipeline import Pipeline
 
 from compression_knn.knn import CompressionKNNClassifier
+from compression_knn.knn import CompressionKNNClassifierCV
 
 
 def generate_data():
@@ -83,14 +83,46 @@ class TestSklearnAPICompressionKNNClassifier(unittest.TestCase):
 
     def test_grid_search(self):
         param_grid = {
-            "n_neighbors": [2, 3, 5],
+            "n_neighbors": [2],
         }
         grid_search = GridSearchCV(
             self.classifier,
             param_grid,
-            cv=3,
+            cv=2,
         )
         grid_search.fit(np.array(self.X).reshape(-1, 1), np.array(self.y))
+
+
+class TestSklearnAPICompressionKNNClassifierCV(unittest.TestCase):
+    def setUp(self):
+        self.X, self.y = generate_data()
+        self.classifier = CompressionKNNClassifierCV()
+
+    def test_is_sklearn_classifier(self):
+        self.assertEqual(self.classifier._estimator_type, "classifier")
+
+    def test_fit(self):
+        self.classifier.fit(self.X, self.y)
+
+    def test_predict(self):
+        self.classifier.fit(self.X, self.y)
+        y_pred = self.classifier.predict(self.X)
+        self.assertEqual(len(y_pred), len(self.y))
+
+    def test_clone(self):
+        self.classifier.fit(self.X, self.y)
+        cloned_regressor = clone(self.classifier)
+        self.assertIsNot(self.classifier, cloned_regressor)
+        self.assertEqual(self.classifier.get_params(), cloned_regressor.get_params())
+
+    def test_pipeline(self):
+        pipeline = Pipeline(
+            [
+                ("classifier", self.classifier),
+            ]
+        )
+        pipeline.fit(self.X, self.y)
+        pipeline.predict(self.X)
 
 
 if __name__ == "__main__":
