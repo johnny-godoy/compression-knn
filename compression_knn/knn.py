@@ -12,7 +12,6 @@ import scipy.stats
 from sklearn.base import BaseEstimator
 from sklearn.base import ClassifierMixin
 from sklearn.metrics import accuracy_score
-from sklearn.metrics import check_scoring
 from sklearn.metrics import get_scorer_names
 from sklearn.model_selection import BaseCrossValidator
 from sklearn.model_selection import check_cv
@@ -44,7 +43,7 @@ class BaseCompressionKNN(BaseEstimator, ClassifierMixin, abc.ABC):
     def __init__(
         self,
         *,
-        n_neighbors,
+        n_neighbors=None,  # To be set by subclass
         compressor: str = "gzip",
         random_state: int | np.random.RandomState | None = None,
     ):
@@ -80,6 +79,7 @@ class BaseCompressionKNN(BaseEstimator, ClassifierMixin, abc.ABC):
     def _distance_matrix(self, X: npt.ArrayLike[str]) -> np.ndarray:
         """Return the distance matrix between X and the training data."""
         to_arr = check_array(X, dtype="str", ensure_2d=False)
+        to_arr = to_arr.reshape((1, -1))  # type: ignore
         combination_matrix = np.char.add(to_arr, self.X_)
         combined_lengths = compression_length(combination_matrix, self.compressor)
         test_lengths = compression_length(to_arr, self.compressor)
@@ -148,6 +148,19 @@ class CompressionKNNClassifier(BaseCompressionKNN):
         "n_neighbors": [Interval(Integral, 1, None, closed="left")],
     }
 
+    def __init__(
+        self,
+        *,
+        n_neighbors: int = 5,
+        compressor: str = "gzip",
+        random_state: int | np.random.RandomState | None = None,
+    ):
+        super().__init__(
+            n_neighbors=n_neighbors,
+            compressor=compressor,
+            random_state=random_state,
+        )
+
     def _check_neighbors(self, n_neighbors, n_samples: int):
         if n_neighbors > n_samples:
             raise ValueError(
@@ -189,11 +202,9 @@ class CompressionKNNClassifierCV(BaseCompressionKNN):
         - int, to specify the number of folds in a StratifiedKFold,
         - CV splitter
         - An iterable yielding (train, test) splits as arrays of indices.
-    scoring: str, callable, or None, default=None
-        A string (see sklearn's model evaluation documentation) or
-        a scorer callable object / function with signature
-        ``scorer(estimator, X, y)``.
-    search_strategy: str, options={"partition", "sort"}
+    scoring: callable, default=accuracy_score
+        The scoring function to use for cross-validation.
+    search_strategy: str, options={"partition", "sort"}, default="sort"
         The search strategy to use when finding the nearest neighbors.
         'partition' uses np.argpartition to find the n_neighbors smallest distances.
         It should be faster than 'sort' when the list of n_neighbors is small.
@@ -241,8 +252,8 @@ class CompressionKNNClassifierCV(BaseCompressionKNN):
         compressor: str = "gzip",
         random_state: int | np.random.RandomState | None = None,
         cv: int | BaseCrossValidator | None = None,
-        scoring: str | callable | None = None,
-        search_strategy: str = "partition",
+        scoring: callable = accuracy_score,
+        search_strategy: str = "sort",
     ):
         super().__init__(
             n_neighbors=n_neighbors,
@@ -278,31 +289,35 @@ class CompressionKNNClassifierCV(BaseCompressionKNN):
             return functools.partial(mode, rng=self._rng)
         return lambda x: scipy.stats.mode(x, axis=0)[0]  # type: ignore
 
-    def _check_params(self):
-        super()._check_params()
-        self._scorer = check_scoring(self, self.scoring, allow_none=True)
-        if self._scorer is None:
-            self._scorer = accuracy_score
-
     def fit(self, X: npt.ArrayLike[str], y: npt.ArrayLike[str]) -> Self:
         super().fit(X, y)
-        # Now we need to improve the checking
+        # Checking the cv parameter
         self._cv = check_cv(self.cv, y, classifier=True)
-        self._check_params()
         # Finish checking the neighbors
-        n_samples = np.min([len(fold) for _, fold in self._cv.split(X, y)])
+        fold_sizes = np.array(
+            [len(fold) for _, fold in self._cv.split(self.X_, self.y_)]
+        )
+        n_samples = np.min(fold_sizes)
         self._n_neighbors = self._check_neighbors(self.n_neighbors, n_samples)
-        self.cv_result_ = np.empty((len(self._n_neighbors), len(self._cv)))
+        self.cv_result_ = np.empty(
+            (len(self._n_neighbors), len(fold_sizes)), dtype=float
+        )
+        combination_matrix = np.char.add(self.X_, self.X_.reshape(1, -1))
+        combined_lengths = compression_length(combination_matrix, self.compressor)
+        distances = (combined_lengths - self.train_lengths_) / self.train_lengths_
         # Populating the cv_result_ array with the chosen search strategy
         if self.search_strategy == "sort":
-            nearest = np.argsort(self._distance_matrix(self.X_), axis=1)
-            for train, test in self._cv.split(X, y):
-                y_train, y_test = y[train], y[test]
+            nearest = np.argsort(distances, axis=0)
+            for fold, (_, test) in enumerate(self._cv.split(self.X_, self.y_)):
+                y_test = self.y_[test]
                 for i, n_neighbors in enumerate(self._n_neighbors):
-                    neighbors = nearest[test, :n_neighbors]
-                    y_pred = self._mode(y_train[neighbors])
-                    score = self._scorer(y_test, y_pred)
-                    self.cv_result_[i, test] = score
+                    neighbors = nearest[:n_neighbors, test]
+                    most_common_indexes = self._mode(self.y_[neighbors])
+                    y_pred = self._encoder.inverse_transform(
+                        self.y_[most_common_indexes]
+                    )
+                    score = self.scoring(y_test, y_pred)
+                    self.cv_result_[i, fold] = score
         elif self.search_strategy == "partition":
             raise NotImplementedError(
                 "The 'partition' search strategy is not implemented yet."
