@@ -16,11 +16,12 @@ from sklearn.metrics import get_scorer_names
 from sklearn.model_selection import BaseCrossValidator
 from sklearn.model_selection import check_cv
 from sklearn.preprocessing import LabelEncoder
-from sklearn.utils._param_validation import Integral
 from sklearn.utils._param_validation import Interval
 from sklearn.utils._param_validation import StrOptions
 from sklearn.utils.validation import check_array
+from sklearn.utils.validation import check_X_y
 from sklearn.utils.validation import check_random_state
+from numbers import Integral
 
 from compression_knn._compression_algos import algorithms
 from compression_knn.utils import compression_length
@@ -34,7 +35,9 @@ with contextlib.suppress(ImportError):  # not in Python < 3.11
 valid_algorithms = set(algorithms.keys())
 
 
-class BaseCompressionKNN(BaseEstimator, ClassifierMixin, abc.ABC):
+class BaseCompressionKNN(ClassifierMixin, BaseEstimator, abc.ABC):
+    _estimator_type = "classifier"
+
     _parameter_constraints = {
         "compressor": [StrOptions(valid_algorithms)],
         "random_state": ["random_state"],
@@ -65,7 +68,7 @@ class BaseCompressionKNN(BaseEstimator, ClassifierMixin, abc.ABC):
 
     def fit(self, X: npt.ArrayLike[str], y: npt.ArrayLike[str]) -> Self:
         self._check_params()
-        self.X_, self.y_ = self._validate_data(
+        self.X_, self.y_ = check_X_y(
             X, y, accept_sparse=False, ensure_2d=False, dtype="str"
         )
         self.X_ = self.X_.reshape((-1, 1))
@@ -106,8 +109,8 @@ class BaseCompressionKNN(BaseEstimator, ClassifierMixin, abc.ABC):
         indices = np.argpartition(distances, self._n_neighbors - 1, axis=0)[
             : self._n_neighbors
         ]
-        most_common_indexes = self._mode(self.y_[indices])
-        return self._encoder.inverse_transform(self.y_[most_common_indexes])
+        most_common_labels = self._mode(self.y_[indices])
+        return self._encoder.inverse_transform(most_common_labels)
 
 
 class CompressionKNNClassifier(BaseCompressionKNN):
@@ -248,7 +251,7 @@ class CompressionKNNClassifierCV(BaseCompressionKNN):
 
     def __init__(
         self,
-        n_neighbors: np.ndarray[int] = np.array([2, 3, 5, 10]),
+        n_neighbors: npt.ArrayLike = (2, 3, 5, 10),
         compressor: str = "gzip",
         random_state: int | np.random.RandomState | None = None,
         cv: int | BaseCrossValidator | None = None,
@@ -260,24 +263,33 @@ class CompressionKNNClassifierCV(BaseCompressionKNN):
             compressor=compressor,
             random_state=random_state,
         )
+        if isinstance(self.n_neighbors, np.ndarray):
+            self.n_neighbors = self.n_neighbors.tolist()
+        elif isinstance(self.n_neighbors, tuple):
+            self.n_neighbors = list(self.n_neighbors)
         self.cv = cv
         self.scoring = scoring
         self.search_strategy = search_strategy
 
     def _check_neighbors(self, n_neighbors, n_samples: int) -> np.ndarray[int]:
-        arr = check_array(n_neighbors, ensure_2d=False, dtype=int)
-        max_neighbors = np.max(arr)  # type: ignore
-        if max_neighbors > n_samples:
-            raise ValueError(
-                f"The largest n_neighbors {max_neighbors} is larger"
-                f" than the smallest training fold size {n_samples}."
-            )
+        arr = np.unique(check_array(n_neighbors, ensure_2d=False, dtype=int))
         min_neighbors = np.min(arr)  # type: ignore
         if min_neighbors < 1:
             raise ValueError(
                 f"The smallest n_neighbors {min_neighbors} is less than 1."
             )
-        return arr  # type: ignore
+        valid_neighbors = arr[arr <= n_samples]
+        if len(valid_neighbors) == 0:
+            raise ValueError(
+                f"All n_neighbors values are larger than the smallest "
+                f"training fold size {n_samples}."
+            )
+        if len(valid_neighbors) != len(arr):
+            warnings.warn(
+                f"Ignoring n_neighbors values larger than the smallest training "
+                f"fold size ({n_samples})."
+            )
+        return valid_neighbors  # type: ignore
 
     def _check_mode(self, n_neighbors, n_classes: int) -> callable:
         remainders = np.remainder(n_neighbors, n_classes)
@@ -308,14 +320,17 @@ class CompressionKNNClassifierCV(BaseCompressionKNN):
         # Populating the cv_result_ array with the chosen search strategy
         if self.search_strategy == "sort":
             nearest = np.argsort(distances, axis=0)
-            for fold, (_, test) in enumerate(self._cv.split(self.X_, self.y_)):
-                y_test = self.y_[test]
+            for fold, (train, test) in enumerate(self._cv.split(self.X_, self.y_)):
+                y_test = self._encoder.inverse_transform(self.y_[test])
+                nearest_test = nearest[:, test]
+                in_train = np.isin(nearest_test, train)
                 for i, n_neighbors in enumerate(self._n_neighbors):
-                    neighbors = nearest[:n_neighbors, test]
-                    most_common_indexes = self._mode(self.y_[neighbors])
-                    y_pred = self._encoder.inverse_transform(
-                        self.y_[most_common_indexes]
-                    )
+                    neighbors = np.empty((n_neighbors, len(test)), dtype=int)
+                    for j in range(len(test)):
+                        candidates = nearest_test[:, j][in_train[:, j]]
+                        neighbors[:, j] = candidates[:n_neighbors]
+                    most_common_labels = self._mode(self.y_[neighbors])
+                    y_pred = self._encoder.inverse_transform(most_common_labels)
                     score = self.scoring(y_test, y_pred)
                     self.cv_result_[i, fold] = score
         elif self.search_strategy == "partition":
@@ -329,3 +344,32 @@ class CompressionKNNClassifierCV(BaseCompressionKNN):
         self.n_neighbors_ = self._n_neighbors  # For user access
         self.best_score_ = mean_scores[best_index]
         return self
+
+
+if __name__ == "__main__":
+    import itertools
+
+    from sklearn.dummy import DummyClassifier
+    from sklearn.metrics import classification_report
+    from torchtext.datasets import AG_NEWS
+
+    train_iter = AG_NEWS(split="train")
+    test_iter = AG_NEWS(split="test")
+
+    train_iter = list(itertools.islice(train_iter, 1000))
+    test_iter = list(itertools.islice(test_iter, 100))
+
+    X_train = np.array([row[1] for row in train_iter])
+    y_train = np.array([row[0] for row in train_iter])
+    X_test = np.array([row[1] for row in test_iter])
+    y_test = np.array([row[0] for row in test_iter])
+
+    dummy = DummyClassifier(strategy="most_frequent")
+    dummy.fit(X_train, y_train)
+    print("Dummy report:")
+    print(classification_report(y_test, dummy.predict(X_test)))
+
+    knn = CompressionKNNClassifier()
+    knn.fit(X_train, y_train)
+    print("CompressionKNNClassifier report:")
+    print(classification_report(y_test, knn.predict(X_test)))

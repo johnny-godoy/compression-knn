@@ -1,12 +1,12 @@
 """Test performance on a simple dataset."""
+
 import unittest
 
 import numpy as np
 from numpy.testing import assert_array_equal
 
 from compression_knn._compression_algos import algorithms
-from compression_knn.knn import CompressionKNNClassifier
-
+from compression_knn.knn import CompressionKNNClassifier, CompressionKNNClassifierCV
 
 compressors = list(algorithms.keys())
 
@@ -48,6 +48,48 @@ class TestCompressionKNNClassifier(unittest.TestCase):
 
         self.assertIsInstance(prediction, np.ndarray)
         self.assertEqual(len(prediction), 1)
+
+    def test_predict_multiple_samples_multiclass(self):
+        X_train = [
+            "alpha apple crisp",
+            "beta orange tangy",
+            "gamma banana mellow",
+        ]
+        y_train = ["Apple", "Orange", "Banana"]
+        X_test = [
+            "alpha apple crisp",
+            "beta orange tangy",
+            "gamma banana mellow",
+        ]
+
+        model = CompressionKNNClassifier(n_neighbors=1)
+        model.fit(X_train, y_train)
+
+        predictions = model.predict(X_test)
+
+        assert_array_equal(predictions, np.array(y_train))
+
+    def test_cv_classifier_predicts_string_labels(self):
+        X_train = [
+            "alpha apple crisp",
+            "alpha apple tart",
+            "beta orange tangy",
+            "beta orange peel",
+            "gamma banana mellow",
+            "gamma banana split",
+        ]
+        y_train = ["Apple", "Apple", "Orange", "Orange", "Banana", "Banana"]
+
+        model = CompressionKNNClassifierCV(n_neighbors=[1], cv=2, random_state=0)
+        model.fit(X_train, y_train)
+
+        predictions = model.predict([
+            "alpha apple crisp",
+            "beta orange tangy",
+            "gamma banana mellow",
+        ])
+
+        assert_array_equal(predictions, np.array(["Apple", "Orange", "Banana"]))
 
 
 if __name__ == "__main__":
