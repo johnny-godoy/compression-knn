@@ -1,32 +1,25 @@
 """Classify a text using KNN on a compression metric."""
+
 from __future__ import annotations
 
 import abc
 import contextlib
 import functools
 import warnings
+from numbers import Integral
 
 import numpy as np
 import numpy.typing as npt
 import scipy.stats
-from sklearn.base import BaseEstimator
-from sklearn.base import ClassifierMixin
-from sklearn.metrics import accuracy_score
-from sklearn.metrics import get_scorer_names
-from sklearn.model_selection import BaseCrossValidator
-from sklearn.model_selection import check_cv
+from sklearn.base import BaseEstimator, ClassifierMixin
+from sklearn.metrics import accuracy_score, get_scorer_names
+from sklearn.model_selection import BaseCrossValidator, check_cv
 from sklearn.preprocessing import LabelEncoder
-from sklearn.utils._param_validation import Interval
-from sklearn.utils._param_validation import StrOptions
-from sklearn.utils.validation import check_array
-from sklearn.utils.validation import check_X_y
-from sklearn.utils.validation import check_random_state
-from numbers import Integral
+from sklearn.utils._param_validation import Interval, StrOptions
+from sklearn.utils.validation import check_array, check_random_state, check_X_y
 
 from compression_knn._compression_algos import algorithms
-from compression_knn.utils import compression_length
-from compression_knn.utils import mode
-
+from compression_knn.utils import compression_length, mode
 
 with contextlib.suppress(ImportError):  # not in Python < 3.11
     from typing import Self
@@ -55,12 +48,10 @@ class BaseCompressionKNN(ClassifierMixin, BaseEstimator, abc.ABC):
         self.random_state = random_state
 
     @abc.abstractmethod
-    def _check_neighbors(self, n_neighbors, n_samples: int):
-        ...
+    def _check_neighbors(self, n_neighbors, n_samples: int): ...
 
     @abc.abstractmethod
-    def _check_mode(self, n_neighbors: int, n_classes: int) -> callable:
-        ...
+    def _check_mode(self, n_neighbors: int, n_classes: int) -> callable: ...
 
     def _check_params(self):
         self._validate_params()
@@ -68,9 +59,7 @@ class BaseCompressionKNN(ClassifierMixin, BaseEstimator, abc.ABC):
 
     def fit(self, X: npt.ArrayLike[str], y: npt.ArrayLike[str]) -> Self:
         self._check_params()
-        self.X_, self.y_ = check_X_y(
-            X, y, accept_sparse=False, ensure_2d=False, dtype="str"
-        )
+        self.X_, self.y_ = check_X_y(X, y, accept_sparse=False, ensure_2d=False, dtype="str")
         self.X_ = self.X_.reshape((-1, 1))
         self._encoder = LabelEncoder().fit(self.y_)
         self.y_ = self._encoder.transform(self.y_)
@@ -106,9 +95,7 @@ class BaseCompressionKNN(ClassifierMixin, BaseEstimator, abc.ABC):
 
         """
         distances = self._distance_matrix(X)
-        indices = np.argpartition(distances, self._n_neighbors - 1, axis=0)[
-            : self._n_neighbors
-        ]
+        indices = np.argpartition(distances, self._n_neighbors - 1, axis=0)[: self._n_neighbors]
         most_common_labels = self._mode(self.y_[indices])
         return self._encoder.inverse_transform(most_common_labels)
 
@@ -146,6 +133,7 @@ class CompressionKNNClassifier(BaseCompressionKNN):
      ](https://aclanthology.org/2023.findings-acl.426) (Jiang et al., Findings 2023)
 
     """
+
     _parameter_constraints = {
         **BaseCompressionKNN._parameter_constraints,
         "n_neighbors": [Interval(Integral, 1, None, closed="left")],
@@ -167,8 +155,7 @@ class CompressionKNNClassifier(BaseCompressionKNN):
     def _check_neighbors(self, n_neighbors, n_samples: int):
         if n_neighbors > n_samples:
             raise ValueError(
-                f"n_neighbors ({n_neighbors}) must be less than or equal to"
-                f" the number of samples ({n_samples})."
+                f"n_neighbors ({n_neighbors}) must be less than or equal to" f" the number of samples ({n_samples})."
             )
         return n_neighbors
 
@@ -230,17 +217,16 @@ class CompressionKNNClassifierCV(BaseCompressionKNN):
         The best score found by cross-validation.
 
     """
+
     _parameter_constraints: dict = {
         **BaseCompressionKNN._parameter_constraints,
         "n_neighbors": ["array-like"],
         "cv": ["cv_object"],
         "search_strategy": [
-            StrOptions(
-                {
-                    "partition",
-                    "sort",
-                }
-            )
+            StrOptions({
+                "partition",
+                "sort",
+            })
         ],
         "scoring": [
             StrOptions(set(get_scorer_names())),
@@ -275,20 +261,12 @@ class CompressionKNNClassifierCV(BaseCompressionKNN):
         arr = np.unique(check_array(n_neighbors, ensure_2d=False, dtype=int))
         min_neighbors = np.min(arr)  # type: ignore
         if min_neighbors < 1:
-            raise ValueError(
-                f"The smallest n_neighbors {min_neighbors} is less than 1."
-            )
+            raise ValueError(f"The smallest n_neighbors {min_neighbors} is less than 1.")
         valid_neighbors = arr[arr <= n_samples]
         if len(valid_neighbors) == 0:
-            raise ValueError(
-                f"All n_neighbors values are larger than the smallest "
-                f"training fold size {n_samples}."
-            )
+            raise ValueError(f"All n_neighbors values are larger than the smallest " f"training fold size {n_samples}.")
         if len(valid_neighbors) != len(arr):
-            warnings.warn(
-                f"Ignoring n_neighbors values larger than the smallest training "
-                f"fold size ({n_samples})."
-            )
+            warnings.warn(f"Ignoring n_neighbors values larger than the smallest training " f"fold size ({n_samples}).")
         return valid_neighbors  # type: ignore
 
     def _check_mode(self, n_neighbors, n_classes: int) -> callable:
@@ -306,14 +284,10 @@ class CompressionKNNClassifierCV(BaseCompressionKNN):
         # Checking the cv parameter
         self._cv = check_cv(self.cv, y, classifier=True)
         # Finish checking the neighbors
-        fold_sizes = np.array(
-            [len(fold) for _, fold in self._cv.split(self.X_, self.y_)]
-        )
+        fold_sizes = np.array([len(fold) for _, fold in self._cv.split(self.X_, self.y_)])
         n_samples = np.min(fold_sizes)
         self._n_neighbors = self._check_neighbors(self.n_neighbors, n_samples)
-        self.cv_result_ = np.empty(
-            (len(self._n_neighbors), len(fold_sizes)), dtype=float
-        )
+        self.cv_result_ = np.empty((len(self._n_neighbors), len(fold_sizes)), dtype=float)
         combination_matrix = np.char.add(self.X_, self.X_.reshape(1, -1))
         combined_lengths = compression_length(combination_matrix, self.compressor)
         distances = (combined_lengths - self.train_lengths_) / self.train_lengths_
@@ -334,9 +308,7 @@ class CompressionKNNClassifierCV(BaseCompressionKNN):
                     score = self.scoring(y_test, y_pred)
                     self.cv_result_[i, fold] = score
         elif self.search_strategy == "partition":
-            raise NotImplementedError(
-                "The 'partition' search strategy is not implemented yet."
-            )
+            raise NotImplementedError("The 'partition' search strategy is not implemented yet.")
         # Find the best n_neighbors given the cross-validation results
         mean_scores = np.mean(self.cv_result_, axis=1)
         best_index = np.argmax(mean_scores)
