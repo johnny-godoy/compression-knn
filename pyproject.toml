@@ -1,0 +1,44 @@
+[build-system]
+requires = ["hatchling>=1.25.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "compression-knn"
+version = "0.1.0"
+description = "A KNN text classifier that uses text compression."
+readme = "README.md"
+requires-python = ">=3.12"
+license = "MIT"
+authors = [
+    { name = "Johnny Godoy", email = "johnny.godoy@ing.uchile.cl" },
+]
+maintainers = [
+    { name = "Johnny Godoy", email = "johnny.godoy@ing.uchile.cl" },
+]
+keywords = ["knn", "compression", "text-classification"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
+dependencies = [
+    "numpy>=2.4.6",
+    "scikit-learn>=1.9.0",
+    "scipy>=1.17.1",
+]
+
+[project.urls]
+Homepage = "https://github.com/johnny-godoy/compression-knn"
+Repository = "https://github.com/johnny-godoy/compression-knn"
+
+[tool.hatch.build.targets.wheel]
+packages = ["compression_knn"]
+
+[dependency-groups]
+dev = [
+    "ipykernel>=7.3.0",
+    "matplotlib>=3.11.0",
+]
