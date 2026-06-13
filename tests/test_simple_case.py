@@ -91,6 +91,40 @@ class TestCompressionKNNClassifier(unittest.TestCase):
 
         assert_array_equal(predictions, np.array(["Apple", "Orange", "Banana"]))
 
+    def test_cv_partition_matches_sort_for_k1(self):
+        X_train = [
+            "aaaa apple",
+            "aaa apple",
+            "bbbb orange",
+            "bbb orange",
+            "cccc banana",
+            "ccc banana",
+        ]
+        y_train = ["Apple", "Apple", "Orange", "Orange", "Banana", "Banana"]
+
+        sort_model = CompressionKNNClassifierCV(
+            n_neighbors=[1],
+            cv=2,
+            search_strategy="sort",
+            random_state=0,
+        )
+        partition_model = CompressionKNNClassifierCV(
+            n_neighbors=[1],
+            cv=2,
+            search_strategy="partition",
+            random_state=0,
+        )
+
+        sort_model.fit(X_train, y_train)
+        partition_model.fit(X_train, y_train)
+
+        assert_array_equal(partition_model.cv_result_, sort_model.cv_result_)
+        self.assertEqual(partition_model.n_neighbors_, sort_model.n_neighbors_)
+        assert_array_equal(
+            partition_model.predict(X_train),
+            sort_model.predict(X_train),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

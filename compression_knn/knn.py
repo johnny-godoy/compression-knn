@@ -308,7 +308,20 @@ class CompressionKNNClassifierCV(BaseCompressionKNN):
                     score = self.scoring(y_test, y_pred)
                     self.cv_result_[i, fold] = score
         elif self.search_strategy == "partition":
-            raise NotImplementedError("The 'partition' search strategy is not implemented yet.")
+            for fold, (train, test) in enumerate(self._cv.split(self.X_, self.y_)):
+                y_test = self._encoder.inverse_transform(self.y_[test])
+                fold_distances = distances[np.ix_(train, test)]
+                for i, n_neighbors in enumerate(self._n_neighbors):
+                    local_neighbors = np.argpartition(
+                        fold_distances,
+                        kth=n_neighbors - 1,
+                        axis=0,
+                    )[:n_neighbors]
+                    neighbors = train[local_neighbors]
+                    most_common_labels = self._mode(self.y_[neighbors])
+                    y_pred = self._encoder.inverse_transform(most_common_labels)
+                    score = self.scoring(y_test, y_pred)
+                    self.cv_result_[i, fold] = score
         # Find the best n_neighbors given the cross-validation results
         mean_scores = np.mean(self.cv_result_, axis=1)
         best_index = np.argmax(mean_scores)

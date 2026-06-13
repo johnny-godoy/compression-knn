@@ -66,10 +66,6 @@ print(y_pred)
 # ['Apple', 'Apple']
 ```
 
-## Upcoming
-* Implementation of `CompressionKNNClassifierCV` for fast hyperparameter tuning
-* Classification performance comparison notebooks
-
 ## References
 
 [“Low-Resource” Text Classification: A Parameter-Free Classification Method with 
