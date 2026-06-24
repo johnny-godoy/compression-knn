@@ -106,7 +106,7 @@ class CompressionKNNClassifier(BaseCompressionKNN):
 
     Parameters
     ----------
-    n_neighbours : int, default=5
+    n_neighbors : int, default=5
         Number of neighbors to use by default for nearest neighbors queries.
     compressor : str, options={"gzip", "bzip2", "lzma"}, default="gzip"
         The compression algorithm to use.
