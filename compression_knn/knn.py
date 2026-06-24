@@ -6,6 +6,7 @@ import abc
 import contextlib
 import functools
 import warnings
+from collections.abc import Callable
 from numbers import Integral
 
 import numpy as np
@@ -51,7 +52,7 @@ class BaseCompressionKNN(ClassifierMixin, BaseEstimator, abc.ABC):
     def _check_neighbors(self, n_neighbors, n_samples: int): ...
 
     @abc.abstractmethod
-    def _check_mode(self, n_neighbors: int, n_classes: int) -> callable: ...
+    def _check_mode(self, n_neighbors: int, n_classes: int) -> Callable: ...
 
     def _check_params(self):
         self._validate_params()
@@ -159,7 +160,7 @@ class CompressionKNNClassifier(BaseCompressionKNN):
             )
         return n_neighbors
 
-    def _check_mode(self, n_neighbors, n_classes: int) -> callable:
+    def _check_mode(self, n_neighbors, n_classes: int) -> Callable:
         if n_neighbors % n_classes == 0:
             warnings.warn(
                 f"n_neighbors ({n_neighbors}) is divisible by the number of classes"
@@ -269,7 +270,7 @@ class CompressionKNNClassifierCV(BaseCompressionKNN):
             warnings.warn(f"Ignoring n_neighbors values larger than the smallest training " f"fold size ({n_samples}).")
         return valid_neighbors  # type: ignore
 
-    def _check_mode(self, n_neighbors, n_classes: int) -> callable:
+    def _check_mode(self, n_neighbors, n_classes: int) -> Callable:
         remainders = np.remainder(n_neighbors, n_classes)
         if np.any(remainders == 0):
             warnings.warn(
@@ -279,10 +280,22 @@ class CompressionKNNClassifierCV(BaseCompressionKNN):
             return functools.partial(mode, rng=self._rng)
         return lambda x: scipy.stats.mode(x, axis=0)[0]  # type: ignore
 
+    def _check_scoring(self, scoring) -> Callable:
+        if scoring is None:
+            return accuracy_score
+        if isinstance(scoring, str):
+            from sklearn.metrics import get_scorer
+
+            return get_scorer(scoring)
+        if callable(scoring):
+            return scoring
+        raise ValueError(f"Invalid scoring parameter: {scoring}")
+
     def fit(self, X: npt.ArrayLike[str], y: npt.ArrayLike[str]) -> Self:
         super().fit(X, y)
         # Checking the cv parameter
         self._cv = check_cv(self.cv, y, classifier=True)
+        self._scoring = self._check_scoring(self.scoring)
         # Finish checking the neighbors
         fold_sizes = np.array([len(fold) for _, fold in self._cv.split(self.X_, self.y_)])
         n_samples = np.min(fold_sizes)
@@ -305,7 +318,7 @@ class CompressionKNNClassifierCV(BaseCompressionKNN):
                         neighbors[:, j] = candidates[:n_neighbors]
                     most_common_labels = self._mode(self.y_[neighbors])
                     y_pred = self._encoder.inverse_transform(most_common_labels)
-                    score = self.scoring(y_test, y_pred)
+                    score = self._scoring(y_test, y_pred)
                     self.cv_result_[i, fold] = score
         elif self.search_strategy == "partition":
             for fold, (train, test) in enumerate(self._cv.split(self.X_, self.y_)):
@@ -320,7 +333,7 @@ class CompressionKNNClassifierCV(BaseCompressionKNN):
                     neighbors = train[local_neighbors]
                     most_common_labels = self._mode(self.y_[neighbors])
                     y_pred = self._encoder.inverse_transform(most_common_labels)
-                    score = self.scoring(y_test, y_pred)
+                    score = self._scoring(y_test, y_pred)
                     self.cv_result_[i, fold] = score
         # Find the best n_neighbors given the cross-validation results
         mean_scores = np.mean(self.cv_result_, axis=1)
