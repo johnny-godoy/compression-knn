@@ -10,7 +10,7 @@ from compression_knn.knn import CompressionKNNClassifierCV
 from compression_knn.preprocessor import VectorToTextTransformer
 
 __all__ = [
-	"CompressionKNNClassifier",
-	"CompressionKNNClassifierCV",
-	"VectorToTextTransformer",
+    "CompressionKNNClassifier",
+    "CompressionKNNClassifierCV",
+    "VectorToTextTransformer",
 ]
