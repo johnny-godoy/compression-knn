@@ -118,10 +118,8 @@ class CompressionKNNClassifier(BaseCompressionKNN):
 
     Attributes
     ----------
-    X_ : np.ndarray[str]
-        The training data.
-    y_ : np.ndarray[str]
-        The training labels.
+    y_ : np.ndarray[int]
+        The encoded training labels (see `classes_` / the internal label encoder).
     train_lengths_ : np.ndarray[int]
         The lengths of the compressed training data.
     n_neighbors_ : int
