@@ -63,9 +63,7 @@ class BaseCompressionKNN(ClassifierMixin, BaseEstimator, abc.ABC):
         self.X_, self.y_ = check_X_y(X, y, accept_sparse=False, ensure_2d=False, dtype="str")
         if self.X_.ndim == 1:
             self.X_ = self.X_.reshape((-1, 1))
-        elif self.X_.ndim == 2 and self.X_.shape[1] == 1:
-            pass
-        else:
+        elif self.X_.ndim != 2 or self.X_.shape[1] != 1:
             raise ValueError("X must be 1D or a 2D array with a single column of text samples.")
         self._encoder = LabelEncoder().fit(self.y_)
         self.y_ = self._encoder.transform(self.y_)

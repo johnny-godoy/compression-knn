@@ -18,7 +18,9 @@ class TestCompressionKNNClassifier(unittest.TestCase):
         y_train = ["Apple", "Orange"]
 
         model = CompressionKNNClassifier(n_neighbors=1)
-        with self.assertRaisesRegex(ValueError, "single column"):
+        with self.assertRaisesRegex(
+            ValueError, "X must be 1D or a 2D array with a single column of text samples."
+        ):
             model.fit(X_train, y_train)
 
     def test_fit_with_single_column_2d_input_sets_n_neighbors_attribute(self):
