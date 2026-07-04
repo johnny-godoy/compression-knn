@@ -61,10 +61,16 @@ class BaseCompressionKNN(ClassifierMixin, BaseEstimator, abc.ABC):
     def fit(self, X: npt.ArrayLike[str], y: npt.ArrayLike[str]) -> Self:
         self._check_params()
         self.X_, self.y_ = check_X_y(X, y, accept_sparse=False, ensure_2d=False, dtype="str")
-        self.X_ = self.X_.reshape((-1, 1))
+        if self.X_.ndim == 1:
+            self.X_ = self.X_.reshape((-1, 1))
+        elif self.X_.ndim == 2 and self.X_.shape[1] == 1:
+            pass
+        else:
+            raise ValueError("X must be 1D or a 2D array with a single column of text samples.")
         self._encoder = LabelEncoder().fit(self.y_)
         self.y_ = self._encoder.transform(self.y_)
         self._n_neighbors = self._check_neighbors(self.n_neighbors, len(self.X_))
+        self.n_neighbors_ = self._n_neighbors
         self._mode = self._check_mode(self._n_neighbors, len(self._encoder.classes_))
         self.train_lengths_ = compression_length(self.X_, self.compressor)
         return self  # type: ignore
@@ -204,8 +210,8 @@ class CompressionKNNClassifierCV(BaseCompressionKNN):
     ----------
     X_ : np.ndarray[str]
         The training data.
-    y_ : np.ndarray[str]
-        The training labels.
+    y_ : np.ndarray[int]
+        The encoded training labels.
     train_lengths_ : np.ndarray[int]
         The lengths of the compressed training data.
     cv_result_ : np.ndarray[float] of shape (len(n_neighbors), len(cv))
@@ -301,7 +307,9 @@ class CompressionKNNClassifierCV(BaseCompressionKNN):
         self.cv_result_ = np.empty((len(self._n_neighbors), len(fold_sizes)), dtype=float)
         combination_matrix = np.char.add(self.X_, self.X_.reshape(1, -1))
         combined_lengths = compression_length(combination_matrix, self.compressor)
-        distances = (combined_lengths - self.train_lengths_) / self.train_lengths_
+        max_lengths = np.maximum(self.train_lengths_, self.train_lengths_.reshape(1, -1))
+        min_lengths = np.minimum(self.train_lengths_, self.train_lengths_.reshape(1, -1))
+        distances = (combined_lengths - min_lengths) / max_lengths
         # Populating the cv_result_ array with the chosen search strategy
         if self.search_strategy == "sort":
             nearest = np.argsort(distances, axis=0)

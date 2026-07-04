@@ -4,6 +4,7 @@ import unittest
 
 import numpy as np
 from numpy.testing import assert_array_equal
+from sklearn.model_selection import StratifiedKFold
 
 from compression_knn._compression_algos import algorithms
 from compression_knn.knn import CompressionKNNClassifier, CompressionKNNClassifierCV
@@ -12,6 +13,29 @@ compressors = list(algorithms.keys())
 
 
 class TestCompressionKNNClassifier(unittest.TestCase):
+    def test_fit_rejects_multicolumn_2d_input(self):
+        X_train = np.array([["red", "round"], ["orange", "tangy"]])
+        y_train = ["Apple", "Orange"]
+
+        model = CompressionKNNClassifier(n_neighbors=1)
+        with self.assertRaisesRegex(ValueError, "single column"):
+            model.fit(X_train, y_train)
+
+    def test_fit_with_single_column_2d_input_sets_n_neighbors_attribute(self):
+        X_train = np.array(
+            [
+                "red, round, sweet",
+                "orange, round, tangy",
+                "red, oblong, sweet",
+            ]
+        ).reshape(-1, 1)
+        y_train = ["Apple", "Orange", "Apple"]
+
+        model = CompressionKNNClassifier(n_neighbors=2)
+        model.fit(X_train, y_train)
+
+        self.assertEqual(model.n_neighbors_, 2)
+
     def test_fit_and_predict(self):
         X_train = [
             "red, round, sweet",
@@ -124,6 +148,29 @@ class TestCompressionKNNClassifier(unittest.TestCase):
             partition_model.predict(X_train),
             sort_model.predict(X_train),
         )
+
+    def test_cv_scores_match_manual_classifier_cv_for_k1(self):
+        X_train = np.array(["aba", "bbbb", "bab", "aab", "bbb", "aaaa"])
+        y_train = np.array(["A", "B", "B", "A", "B", "A"])
+
+        cv = StratifiedKFold(n_splits=3, shuffle=False)
+        manual_scores = []
+        for train, test in cv.split(X_train, y_train):
+            model = CompressionKNNClassifier(n_neighbors=1, random_state=0)
+            model.fit(X_train[train], y_train[train])
+            y_pred = model.predict(X_train[test])
+            manual_scores.append(np.mean(y_pred == y_train[test]))
+        manual_scores = np.array(manual_scores)
+
+        model = CompressionKNNClassifierCV(
+            n_neighbors=[1],
+            cv=3,
+            search_strategy="sort",
+            random_state=0,
+        )
+        model.fit(X_train, y_train)
+
+        assert_array_equal(model.cv_result_[0], manual_scores)
 
 
 if __name__ == "__main__":
