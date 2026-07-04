@@ -68,9 +68,9 @@ class TestSklearnAPICompressionKNNClassifier(unittest.TestCase):
 
     def test_clone(self):
         self.classifier.fit(self.X, self.y)
-        cloned_regressor = clone(self.classifier)
-        self.assertIsNot(self.classifier, cloned_regressor)
-        self.assertEqual(self.classifier.get_params(), cloned_regressor.get_params())
+        cloned_classifier = clone(self.classifier)
+        self.assertIsNot(self.classifier, cloned_classifier)
+        self.assertEqual(self.classifier.get_params(), cloned_classifier.get_params())
 
     def test_pipeline(self):
         pipeline = Pipeline(

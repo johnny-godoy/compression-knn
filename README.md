@@ -41,6 +41,8 @@ You may install it with pip:
 pip install git+https://github.com/johnny-godoy/compression-knn.git
 ```
 
+This project currently requires Python 3.12 or newer.
+
 We implement the scikit-learn interface, so it can be used like other scikit-learn classifiers.
 
 ```python
