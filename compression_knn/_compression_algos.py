@@ -4,9 +4,10 @@ import gzip
 import lzma
 
 import numpy as np
+from collections.abc import Callable
 
 
-def vectorize_compressor(func: callable) -> callable:
+def vectorize_compressor(func: Callable[[bytes], bytes]) -> Callable[[bytes], bytes]:
     return np.vectorize(func, otypes=[bytes])
 
 
